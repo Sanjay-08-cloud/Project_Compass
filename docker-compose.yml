@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: compass_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: compass_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d compass_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Redis Message Broker & Cache
+  redis:
+    image: redis:7-alpine
+    container_name: compass_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 3. Local Ollama LLM Server (Self-Hosted Qwen 2.5)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: compass_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  # 4. Django Web Application
+  web:
+    build: .
+    container_name: compass_web
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-compass-docker-production-key-2026
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - USE_POSTGRESQL=True
+      - POSTGRES_DB=compass_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgrespassword
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:3b
+      - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+      - RERANKER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2
+      - RERANKER_MIN_SCORE_THRESHOLD=0.25
+      - RERANKER_TOP_N=3
+    volumes:
+      - .:/app
+      - faiss_data:/app/data/faiss_indexes
+      - bm25_data:/app/data/bm25_indexes
+      - media_data:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  # 5. Celery Asynchronous Document Ingestion Worker
+  celery_worker:
+    build: .
+    container_name: compass_celery
+    restart: unless-stopped
+    command: celery -A compass_project worker -l info
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=django-insecure-compass-docker-production-key-2026
+      - USE_POSTGRESQL=True
+      - POSTGRES_DB=compass_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgrespassword
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_MODEL=qwen2.5:3b
+      - EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
+      - RERANKER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2
+    volumes:
+      - .:/app
+      - faiss_data:/app/data/faiss_indexes
+      - bm25_data:/app/data/bm25_indexes
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
+  faiss_data:
+  bm25_data:
+  media_data:
