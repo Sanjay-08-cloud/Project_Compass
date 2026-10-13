@@ -90,6 +90,12 @@ def main():
     print(f"  • Dual-Path Refusal Cases        : {report.refusal_cases}")
     print(f"  • Retrieval Hit-Rate@K           : {report.retrieval_hit_rate * 100:.1f}% (Target: >= 90%)")
     print(f"  • Mean Reciprocal Rank (MRR@K)   : {report.mrr_at_k:.3f}")
+<<<<<<< HEAD
+    print(f"  • Precision@K (Candidate Set)    : {report.precision_at_k * 100:.1f}%")
+    print(f"  • Recall@K                       : {report.recall_at_k * 100:.1f}%")
+    print(f"  • Grounded Answer Correctness    : {report.answer_correctness_rate * 100:.1f}% (Target: >= 80%)")
+=======
+>>>>>>> cff9f62cc6728b15d39ff413ba5cfff7a681f894
     print(f"  • Refusal Gate Accuracy          : {report.refusal_accuracy * 100:.1f}% (Target: >= 90%)")
     print(f"  • Average Total Latency          : {report.average_latency_ms:.1f} ms")
 
